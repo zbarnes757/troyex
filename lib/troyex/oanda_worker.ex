@@ -35,7 +35,7 @@ defmodule Troyex.OandaWorker do
     Logger.debug "Making call to Oanda"
     headers = [
       {"Authorization", "Bearer #{token()}"},
-      {"Content-Type", "application/x-www-form-urlencoded"}
+      {"Content-Type", "application/json"}
     ]
     opts = [
       stream_to: self(),
