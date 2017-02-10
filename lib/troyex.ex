@@ -12,6 +12,8 @@ defmodule Troyex do
       # supervisor(Troyex.Endpoint, []),
       # Start your own worker by calling: Troyex.Worker.start_link(arg1, arg2, arg3)
       worker(Troyex.OandaWorker, []),
+      worker(Troyex.PriceWorker, []),
+      worker(Troyex.OrderWorker, []),
 
     ]
 

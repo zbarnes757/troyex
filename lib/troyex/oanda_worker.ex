@@ -6,8 +6,6 @@ defmodule Troyex.OandaWorker do
     defstruct streaming_pid: nil
   end
 
-
-
   ##########
   # Client #
   ##########
@@ -17,7 +15,7 @@ defmodule Troyex.OandaWorker do
   end
 
   def connect do
-    GenServer.call(__MODULE__, :connect)
+    GenServer.cast(__MODULE__, :connect)
   end
 
   def disconnect do
@@ -26,25 +24,25 @@ defmodule Troyex.OandaWorker do
 
   def accounts do
     headers = [
-      {"Authorization", "Bearer #{token()}"},
+      {"Authorization", "Bearer #{oanda_token()}"},
       {"Content-Type", "application/json"}
     ]
 
-    HTTPoison.get!("https://api-fxpractice.oanda.com/v3/accounts", headers, recv_timeout: 8_000)
+    HTTPoison.get!("https://api-fxpractice.oanda.com/v3/accounts", headers, recv_timeout: 10_000)
   end
 
   ##########
-  # Server #
+  # Callbacks #
   ##########
 
   def init(_) do
     {:ok, %State{}}
   end
 
-  def handle_call(:connect, _from, state) do
+  def handle_cast(:connect, state) do
     price_connection()
 
-    {:reply, nil, state}
+    {:noreply, state}
   end
 
   def handle_cast(:disconnect, %State{streaming_pid: nil} = state) do
@@ -62,6 +60,7 @@ defmodule Troyex.OandaWorker do
   end
 
   # Handle the data that comes from Oanda
+  def handle_info(%HTTPoison.AsyncHeaders{id: _id, headers: _headers}), do: nil
   def handle_info(%HTTPoison.AsyncStatus{code: 200, id: pid}, state) do
     Logger.debug "Successfully connected to oanda price stream."
     {:noreply, %{state | streaming_pid: pid}}
@@ -97,7 +96,7 @@ defmodule Troyex.OandaWorker do
   # Private Funcitions #
   ######################
 
-  defp token do
+  defp oanda_token do
     Application.get_env(:troyex, :oanda_key)
   end
 
@@ -106,9 +105,9 @@ defmodule Troyex.OandaWorker do
   end
 
   defp price_connection do
-    Logger.debug "Making call to Oanda"
+    Logger.debug "Making pricing call to Oanda"
     headers = [
-      {"Authorization", "Bearer #{token()}"},
+      {"Authorization", "Bearer #{oanda_token()}"},
       {"Content-Type", "application/json"}
     ]
     opts = [
@@ -121,8 +120,24 @@ defmodule Troyex.OandaWorker do
     HTTPoison.get!("https://stream-fxpractice.oanda.com/v3/accounts/#{account_id()}/pricing/stream", headers, opts)
   end
 
-  defp process_chunk(%{"type" => "PRICE"} = chunk) do
-    IO.inspect chunk
+  defp process_chunk(%{"type" => "PRICE", "asks" => asks, "bids" => bids, "closeoutBid" => closeout_bid, "closeoutAsk" => closeout_ask} = chunk) do
+    parsed_asks =
+      asks
+      |> Enum.map(fn(ask) -> String.to_float(ask["price"]) end)
+      |> Enum.min_max()
+
+    parsed_bids =
+      bids
+      |> Enum.map(fn(bid) -> String.to_float(bid["price"]) end)
+      |> Enum.min_max()
+
+    Troyex.PriceWorker.send_price(%{
+        chunk |
+        "asks" => parsed_asks,
+        "bids" => parsed_bids,
+        "closeoutAsk" => String.to_float(closeout_ask),
+        "closeoutBid" => String.to_float(closeout_bid)
+      })
   end
 
   defp process_chunk(_chunk) do
