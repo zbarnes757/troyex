@@ -30,4 +30,9 @@ defmodule Troyex do
     Troyex.Endpoint.config_change(changed, removed)
     :ok
   end
+
+  def connect, do: Troyex.OandaWorker.connect()
+  def connect(instrument), do: Troyex.OandaWorker.connect(instrument)
+
+  def disconnect, do: Troyex.OandaWorker.disconnect
 end

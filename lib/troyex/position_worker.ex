@@ -34,8 +34,7 @@ defmodule Troyex.PositionWorker do
   def handle_info(:check_open_position, state) do
     Logger.debug "Checking open position to see if closed yet."
 
-    check_open_positions()
-    |> handle_resp()
+    check_open_positions() |> handle_resp()
 
     {:noreply, state}
   end
