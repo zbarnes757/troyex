@@ -40,6 +40,7 @@ defmodule Troyex.PriceWorker do
 
     {:noreply, new_state}
   end
+
   def handle_cast({:send_price, price_chunk}, state) do
     Logger.debug "Received price info for #{price_chunk["instrument"]}"
     {:noreply, state ++ [price_chunk]}

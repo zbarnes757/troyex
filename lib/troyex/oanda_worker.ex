@@ -120,7 +120,16 @@ defmodule Troyex.OandaWorker do
     HTTPoison.get!("https://stream-fxpractice.oanda.com/v3/accounts/#{account_id()}/pricing/stream", headers, opts)
   end
 
-  defp process_chunk(%{"type" => "PRICE", "asks" => asks, "bids" => bids, "closeoutBid" => closeout_bid, "closeoutAsk" => closeout_ask} = chunk) do
+  defp process_chunk(
+    %{
+      "type" => "PRICE",
+      "asks" => asks,
+      "bids" => bids,
+      "closeoutBid" => closeout_bid,
+      "closeoutAsk" => closeout_ask,
+      "tradeable" => true
+    } = chunk
+  ) do
     parsed_asks =
       asks
       |> Enum.map(fn(ask) -> String.to_float(ask["price"]) end)
@@ -141,6 +150,6 @@ defmodule Troyex.OandaWorker do
   end
 
   defp process_chunk(_chunk) do
-    Logger.debug "Non-price info"
+    Logger.debug "Heartbeat..."
   end
 end

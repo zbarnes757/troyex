@@ -93,6 +93,7 @@ defmodule Troyex.OrderWorker do
     Logger.debug "Sending order for #{inspect body}"
     HTTPoison.post("https://api-fxpractice.oanda.com/v3/accounts/#{account_id()}/orders", Poison.encode!(body), headers)
   end
+
   defp send_order(:sell, instrument, units, price, closeout) do
     body = %{
       order: %{
@@ -124,5 +125,4 @@ defmodule Troyex.OrderWorker do
   defp account_id do
     Application.get_env(:troyex, :account_id)
   end
-
 end
