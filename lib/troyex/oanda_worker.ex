@@ -2,8 +2,22 @@ defmodule Troyex.OandaWorker do
   use GenServer
   require Logger
 
+  @major_pairs [
+    "EUR_USD",
+    "GBP_USD",
+    "USD_CAD",
+    "USD_CHF",
+    "USD_JPY",
+    "USD_JPY",
+    "EUR_GBP",
+    "EUR_CHF",
+    "AUD_USD",
+    "EUR_JPY",
+    "GBP_JPY"
+  ]
+
   defmodule State do
-    defstruct streaming_pid: nil
+    defstruct streaming_pid: nil, instrument: "EUR_USD"
   end
 
   ##########
@@ -15,7 +29,15 @@ defmodule Troyex.OandaWorker do
   end
 
   def connect do
-    GenServer.cast(__MODULE__, :connect)
+    GenServer.cast(__MODULE__, {:connect, nil})
+  end
+
+  def connect(instrument) when instrument in @major_pairs do
+    GenServer.cast(__MODULE__, {:connect, instrument})
+  end
+
+  def connect(instrument) do
+    "#{instrument} is not listed in major pairs. Try one of: #{Enum.join(@major_pairs, ", ")}"
   end
 
   def disconnect do
@@ -23,12 +45,7 @@ defmodule Troyex.OandaWorker do
   end
 
   def accounts do
-    headers = [
-      {"Authorization", "Bearer #{oanda_token()}"},
-      {"Content-Type", "application/json"}
-    ]
-
-    HTTPoison.get!("https://api-fxpractice.oanda.com/v3/accounts", headers, recv_timeout: 10_000)
+    HTTPoison.get!("https://api-fxpractice.oanda.com/v3/accounts", headers(), recv_timeout: 10_000)
   end
 
   ##########
@@ -39,10 +56,16 @@ defmodule Troyex.OandaWorker do
     {:ok, %State{}}
   end
 
-  def handle_cast(:connect, state) do
-    price_connection()
+  def handle_cast({:connect, nil}, %{instrument: instrument} = state) do
+    price_connection(instrument)
 
     {:noreply, state}
+  end
+
+  def handle_cast({:connect, instrument}, state) do
+    price_connection(instrument)
+
+    {:noreply, %{state | instrument: instrument}}
   end
 
   def handle_cast(:disconnect, %State{streaming_pid: nil} = state) do
@@ -67,7 +90,7 @@ defmodule Troyex.OandaWorker do
   end
 
   def handle_info(%HTTPoison.AsyncStatus{code: code, id: _pid}, state) do
-    Logger.debug "Failed to connected to oanda price stream. Code: #{code}"
+    Logger.debug "Failed to connected to oanda price stream. Code: #{code}."
     {:noreply, state}
   end
 
@@ -79,10 +102,10 @@ defmodule Troyex.OandaWorker do
     {:noreply, state}
   end
 
-  def handle_info(%HTTPoison.Error{id: _pid, reason: {:closed, :timeout}}, state) do
-    # connect again
+  def handle_info(%HTTPoison.Error{id: _pid, reason: {:closed, :timeout}}, %{instrument: instrument} = state) do
     Logger.error "Got a timeout from Oanda. Attempting to reconnect"
-    price_connection()
+
+    price_connection(instrument)
 
     {:noreply, state}
   end
@@ -96,28 +119,18 @@ defmodule Troyex.OandaWorker do
   # Private Funcitions #
   ######################
 
-  defp oanda_token do
-    Application.get_env(:troyex, :oanda_key)
-  end
+  defp price_connection(instrument) do
+    Logger.debug "Making pricing call to Oanda for instrument: #{instrument}"
 
-  defp account_id do
-    Application.get_env(:troyex, :account_id)
-  end
-
-  defp price_connection do
-    Logger.debug "Making pricing call to Oanda"
-    headers = [
-      {"Authorization", "Bearer #{oanda_token()}"},
-      {"Content-Type", "application/json"}
-    ]
     opts = [
       stream_to: self(),
       params: [
-        {"instruments", "EUR_USD"}
-      ]
+        {"instruments", instrument}
+      ],
+      recv_timeout: 10_000
     ]
 
-    HTTPoison.get!("https://stream-fxpractice.oanda.com/v3/accounts/#{account_id()}/pricing/stream", headers, opts)
+    HTTPoison.get!("https://stream-fxpractice.oanda.com/v3/accounts/#{account_id()}/pricing/stream", headers(), opts)
   end
 
   defp process_chunk(
@@ -151,5 +164,20 @@ defmodule Troyex.OandaWorker do
 
   defp process_chunk(_chunk) do
     Logger.debug "Heartbeat..."
+  end
+
+  defp oanda_token do
+    Application.get_env(:troyex, :oanda_key)
+  end
+
+  defp account_id do
+    Application.get_env(:troyex, :account_id)
+  end
+
+  defp headers do
+    [
+      {"Authorization", "Bearer #{oanda_token()}"},
+      {"Content-Type", "application/json"}
+    ]
   end
 end

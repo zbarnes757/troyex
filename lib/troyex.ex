@@ -14,6 +14,7 @@ defmodule Troyex do
       worker(Troyex.OandaWorker, []),
       worker(Troyex.PriceWorker, []),
       worker(Troyex.OrderWorker, []),
+      worker(Troyex.PositionWorker, []),
 
     ]
 
